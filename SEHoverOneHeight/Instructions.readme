@@ -1,0 +1,7 @@
+﻿Strart - for start
+Stop - for stop)
+
+COCKPIT_NAME - name of the cockpit
+eps - error of hover height
+
+You must know, that the height can be adjusted within the specified "min height" of the hover
