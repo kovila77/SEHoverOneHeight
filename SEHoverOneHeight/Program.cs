@@ -26,6 +26,7 @@ namespace IngameScript
 
         List<IMyTerminalBlock> tmpLst;
         List<IMyThrust> hovers;
+        List<IMyGyro> gyros;
         IMyCockpit myCockpit;
         IMyTextSurface lcd;
 
@@ -39,7 +40,11 @@ namespace IngameScript
         float maxHoversHeight;
 
         float hoverHeight;
+        float changedHoverHeight;
         float newHoverHeight;
+
+        bool show = true;
+        bool makeWork = false;
 
         public Program()
         {
@@ -62,35 +67,140 @@ namespace IngameScript
             maxHoversHeight = hovers[0].GetMaximum<float>("Hover_MinHeight");
 
             lcd.WriteText("...");
+
+            if (!bool.TryParse(Storage, out show))
+            {
+                show = true;
+            }
+
+            Runtime.UpdateFrequency = UpdateFrequency.Update10;
         }
 
         public void Save()
         {
-
+            Storage = show.ToString();
         }
 
         public void Main(string argument, UpdateType updateSource)
         {
             if (updateSource == UpdateType.Update10)
             {
-                CompensateHeight();
+                if (makeWork)
+                {
+                    CompensateHeight();
+                }
+                else if (show)
+                {
+                    Show();
+                }
             }
             else
             {
-                if (argument == "Start")
+                if (argument == "Up")
                 {
-                    Runtime.UpdateFrequency = UpdateFrequency.Update10;
+                    IncreaseHeversHeight();
+                }
+                else if (argument == "Down")
+                {
+                    DecreaseHeversHeight();
+                }
+                else if (argument == "Start")
+                {
                     dCenterHeight = (myCockpit.GetPosition() - centerOfPlanet).Length();
-                    hoverHeight = hovers[0].GetValueFloat("Hover_MinHeight");
+                    changedHoverHeight = hoverHeight = hovers[0].GetValueFloat("Hover_MinHeight");
 
                     foreach (IMyThrust thr in hovers)
                     {
                         thr.SetValueBool("Hover_AutoAltitude", true);
                     }
+
+                    makeWork = true;
                 }
                 else if (argument == "Stop")
                 {
-                    Runtime.UpdateFrequency = UpdateFrequency.None;
+                    makeWork = false;
+                }
+                else if (argument == "Show")
+                {
+                    show = !show;
+                }
+                //else if (argument == "StartHorizontal")
+                //{
+
+                //}
+                //else if (argument == "StopHorizontal")
+                //{
+
+                //}
+            }
+        }
+
+        //void Setup()
+        //{
+        //    var l = new List<IMyTerminalBlock>();
+
+        //    _rc = (IMyRemoteControl)GridTerminalSystem.GetBlockWithName(REMOTE_CONTROL_NAME ?? "");
+        //    if (_rc == null)
+        //    {
+        //        GridTerminalSystem.GetBlocksOfType<IMyRemoteControl>(l, x => x.CubeGrid == Me.CubeGrid);
+        //        _rc = (IMyRemoteControl)l[0];
+        //    }
+
+        //    GridTerminalSystem.GetBlocksOfType<IMyGyro>(l, x => x.CubeGrid == Me.CubeGrid);
+        //    gyros = l.ConvertAll(x => (IMyGyro)x);
+
+        //    if (gyros.Count > LIMIT_GYROS)
+        //        gyros.RemoveRange(LIMIT_GYROS, gyros.Count - LIMIT_GYROS);
+        //}
+
+        private void IncreaseHeversHeight()
+        {
+            if (makeWork)
+            {
+                float dif = 2f;
+                if (changedHoverHeight < 5)
+                {
+                    dif = 0.5f;
+                }
+                else if (changedHoverHeight < 20)
+                {
+                    dif = 1f;
+                }
+
+                changedHoverHeight = changedHoverHeight + dif;
+                SetHoversMinHeight(changedHoverHeight + dif);
+            }
+            else
+            {
+                foreach (IMyTerminalBlock hover in hovers)
+                {
+                    hover.ApplyAction("MinAlt_Increase");
+                }
+            }
+        }
+
+        private void DecreaseHeversHeight()
+        {
+            if (makeWork)
+            {
+                float dif = 2f;
+                if (changedHoverHeight < 5)
+                {
+                    dif = 0.5f;
+                }
+                else if (changedHoverHeight < 20)
+                {
+                    dif = 1f;
+                }
+
+                changedHoverHeight = changedHoverHeight - dif;
+                SetHoversMinHeight(changedHoverHeight - dif);
+            }
+            else
+            {
+                foreach (IMyTerminalBlock hover in hovers)
+                {
+                    hover.ApplyAction("MinAlt_Decrease");
                 }
             }
         }
@@ -99,25 +209,17 @@ namespace IngameScript
         {
             newCenterHeight = (myCockpit.GetPosition() - centerOfPlanet).Length();
             dif = dCenterHeight - newCenterHeight;
-            newHoverHeight = hoverHeight + (float)dif;
+            newHoverHeight = changedHoverHeight + (float)dif;
 
             if (Math.Abs(dif) > eps)
             {
                 SetHoversMinHeight(newHoverHeight);
             }
 
-            lcd.WriteText("Start height: " + dCenterHeight + "\n"
-                + "Start hover height: " + hoverHeight + "\n"
-                + "Current height: " + newCenterHeight + "\n"
-                + "Difference: " + dif + "\n"
-                + "Current hover height: " + hovers[0].GetValueFloat("Hover_MinHeight") + "\n"
-                + "New hover height: " + newHoverHeight + "\n"
-                + "Min Hover_MinHeight: " + minHoversHeight + "\n"
-                + "Max Hover_MinHeight: " + maxHoversHeight + "\n"
-                );
+            Show();
         }
 
-        public void SetHoversMinHeight(float h)
+        private void SetHoversMinHeight(float h)
         {
             h = Math.Max(minHoversHeight, Math.Min(maxHoversHeight, h));
 
@@ -125,6 +227,21 @@ namespace IngameScript
             {
                 hover.SetValueFloat("Hover_MinHeight", h);
             }
+        }
+
+        private void Show()
+        {
+            lcd.WriteText("Start hover height:    " + hoverHeight + "\n" +
+                          "Changed start hov. h.: " + changedHoverHeight + "\n" +
+                          "Current hover0 h.:     " + hovers[0].GetValueFloat("Hover_MinHeight") + "\n" +
+                          "New comput. hover h.:  " + newHoverHeight + "\n" +
+                          "---\n" +
+                          "Start planet height:   " + dCenterHeight + "\n" +
+                          "Current planet height: " + newCenterHeight + "\n" +
+                          "Difference abs. h.:    " + dif + "\n" +
+                          "Min Hover_MinHeight:   " + minHoversHeight + "\n" +
+                          "Max Hover_MinHeight:   " + maxHoversHeight + "\n"
+                );
         }
     }
 }
